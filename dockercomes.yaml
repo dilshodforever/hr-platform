@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+
+  # Migrate
+  migrate:
+    image: migrate/migrate
+    networks:
+      - db
+    volumes:
+      - ./company-service/migrations:/migrations
+    command: [ "-path", "/migrations", "-database",  "postgres://postgres:root@postgres:5432/company?sslmode=disable", "up" ]
+    depends_on:
+      - postgres-db
+
+  # Postgres Database
+  postgres-db:
+    container_name: postgres
+    image: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+      PGDATA: /data/postgres
+      POSTGRES_DB: client_job_services_db
+    volumes:
+      - db:/databasedatadb/postgres
+    ports:
+      - "5332:5332"
+    networks:
+      - db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Company Service
+  company-service:
+    container_name: company-service
+    build: ./company-service
+    depends_on:
+      - postgres-db
+    ports:
+      - "1111:1111"
+    networks:
+      - db
+
+  # Auth service
+  auth-service:
+    container_name: auth-service
+    build: ./auth-service
+    depends_on:
+      - postgres-db
+      - company-service
+      - job-service
+    ports:
+      - "4444:4444"
+    networks:
+      - db
+
+  # API Gateway
+  api-gateway:
+    container_name: api-gateway
+    build: ./api-gateway
+    depends_on:
+      - postgres-db
+      - company-service
+      - auth-service
+    ports:
+      - "5555:5555"
+    networks:
+      - db
+
+# Docker Networks
+networks:
+  db:
+    driver: bridge
+
+# Docker Volumes
+volumes:
+  db:
